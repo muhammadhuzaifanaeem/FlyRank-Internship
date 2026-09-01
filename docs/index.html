@@ -3,176 +3,309 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ranking Content Pages for Review Priority</title>
+<title>FlyRank ML — Content Review Prioritization Engine</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
   :root {
-    --paper: #FAFAF6;
-    --ink: #1B1B18;
-    --ink-soft: #4A4A44;
-    --accent: #1D3E5C;
-    --rule: #D9D6CC;
+    --bg-dark: #0a0d14;
+    --panel-bg: rgba(18, 24, 38, 0.75);
+    --panel-border: rgba(255, 255, 255, 0.08);
+    --accent-blue: #38ef7d;
+    --accent-cyan: #11998e;
+    --text-main: #f0f4f8;
+    --text-muted: #8a99ad;
+    --code-bg: #131b2e;
   }
-  * { box-sizing: border-box; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
-    margin: 0;
-    background: var(--paper);
-    color: var(--ink);
+    background-color: var(--bg-dark);
+    background-image:
+      radial-gradient(at 0% 0%, rgba(17, 153, 142, 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(56, 239, 125, 0.1) 0px, transparent 50%);
+    background-attachment: fixed;
+    color: var(--text-main);
     font-family: 'Inter', sans-serif;
-    line-height: 1.65;
-    font-size: 17px;
+    line-height: 1.5;
+    padding: 40px 24px;
   }
-  .wrap { max-width: 720px; margin: 0 auto; padding: 80px 24px 120px; }
-  .masthead { max-width: 720px; margin: 0 auto; padding: 40px 24px 0; }
-  .masthead .label {
-    font-size: 13px; color: var(--ink-soft); letter-spacing: 0.02em;
+
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  header {
+    border-bottom: 1px solid var(--panel-border);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
   }
-  h1 {
-    font-family: 'Source Serif 4', serif;
+
+  .badge {
+    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+    color: #000;
     font-weight: 700;
-    font-size: 2.6rem;
-    line-height: 1.15;
-    margin: 16px 0 8px;
-    max-width: 620px;
+    font-size: 11px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+    letter-spacing: 1px;
   }
-  .byline { color: var(--ink-soft); font-size: 15px; margin-bottom: 48px; }
-  h2 {
-    font-family: 'Source Serif 4', serif;
+
+  h1 { font-size: 2rem; font-weight: 700; margin-top: 8px; }
+  .subtitle { color: var(--text-muted); font-size: 0.95rem; }
+
+  .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 20px; }
+  .col-12 { grid-column: span 12; }
+  .col-6 { grid-column: span 6; }
+  .col-4 { grid-column: span 4; }
+
+  @media (max-width: 768px) {
+    .col-6, .col-4 { grid-column: span 12; }
+  }
+
+  .card {
+    background: var(--panel-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+  }
+  .card:hover {
+    border-color: rgba(56, 239, 125, 0.3);
+    transform: translateY(-2px);
+  }
+
+  .card-title {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
     font-weight: 600;
-    font-size: 1.5rem;
-    margin: 56px 0 16px;
-    padding-top: 32px;
-    border-top: 1px solid var(--rule);
   }
-  h2:first-of-type { border-top: none; padding-top: 0; margin-top: 40px; }
-  p { max-width: 640px; }
-  .abstract {
-    font-size: 1.05rem;
-    color: var(--ink-soft);
-    border-left: 3px solid var(--accent);
-    padding-left: 20px;
-    margin: 32px 0 48px;
+
+  .stat-val { font-size: 2.2rem; font-weight: 700; color: #fff; }
+  .stat-desc { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
+
+  pre, code { font-family: 'Fira Code', monospace; }
+  .pipeline-spec {
+    background: var(--code-bg);
+    padding: 16px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: #a6accd;
+    border: 1px solid rgba(255,255,255,0.05);
+    overflow-x: auto;
   }
-  .abstract strong { color: var(--ink); font-weight: 600; }
-  figure { margin: 32px 0; text-align: center; }
-  figure img {
-    max-width: 100%;
-    border: 1px solid var(--rule);
-    border-radius: 2px;
+  .pipeline-spec span.key { color: #f07178; }
+  .pipeline-spec span.str { color: #c3e88d; }
+  .pipeline-spec span.num { color: #f78c6c; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9rem; }
+  th { text-align: left; padding: 10px; color: var(--text-muted); border-bottom: 1px solid var(--panel-border); }
+  td { padding: 12px 10px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  tr:hover { background: rgba(255,255,255,0.02); }
+
+  .status-tag {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
   }
-  figcaption {
-    font-size: 14px;
-    color: var(--ink-soft);
+  .status-high { background: rgba(255, 87, 87, 0.2); color: #ff5757; }
+  .status-med { background: rgba(255, 184, 77, 0.2); color: #ffb84d; }
+
+  .control-group { margin-top: 15px; }
+  label { font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px; }
+  input[type=range] { width: 100%; accent-color: var(--accent-blue); }
+
+  .note {
+    font-size: 0.78rem;
+    color: var(--text-muted);
     margin-top: 10px;
+    font-style: italic;
+    border-top: 1px dashed rgba(255,255,255,0.08);
+    padding-top: 10px;
   }
-  table { width: 100%; border-collapse: collapse; margin: 24px 0; font-size: 15px; }
-  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
-  th { font-weight: 600; color: var(--ink-soft); font-size: 13px; }
-  code {
-    background: #F0EFE8; padding: 2px 6px; border-radius: 3px;
-    font-size: 0.9em; font-family: 'SF Mono', Consolas, monospace;
+
+  footer {
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 1px solid var(--panel-border);
+    font-size: 0.85rem;
+    color: var(--text-muted);
   }
-  a { color: var(--accent); }
-  .footer {
-    margin-top: 72px; padding-top: 24px; border-top: 1px solid var(--rule);
-    font-size: 14px; color: var(--ink-soft);
-  }
-  .footer a { color: var(--accent); }
-  ul { max-width: 640px; }
-  li { margin-bottom: 6px; }
+  footer a { color: var(--accent-blue); }
 </style>
 </head>
 <body>
 
-<div class="masthead">
-  <div class="label">FlyRank ML Internship — Capstone Research Paper</div>
-</div>
+<div class="container">
+  <header>
+    <div>
+      <span class="badge">ML Internship Capstone</span>
+      <h1>Content Decay Ranker</h1>
+      <p class="subtitle">Muhammad Huzaifa Naeem &middot; FlyRank ML Internship, 2026 &middot; Client-held-out evaluation</p>
+    </div>
+    <div style="text-align: right;">
+      <a href="https://github.com/muhammadhuzaifanaeem/FlyRank-Internship" target="_blank" style="color: var(--accent-blue); text-decoration: none; font-family: 'Fira Code', monospace; font-size: 0.9rem;">[GitHub Repo]</a>
+    </div>
+  </header>
 
-<div class="wrap">
-  <h1>Ranking Content Pages for Review Priority: A Precision-Based Approach</h1>
-  <div class="byline">Muhammad Huzaifa Naeem · FlyRank ML Internship, 2026</div>
+  <div class="grid">
+    <div class="card col-4">
+      <div class="card-title">Top Model (Precision@50)</div>
+      <div class="stat-val" style="color: var(--accent-blue);">63.0%</div>
+      <div class="stat-desc">Logistic Regression, on held-out clients</div>
+    </div>
+    <div class="card col-4">
+      <div class="card-title">Dataset Size</div>
+      <div class="stat-val">30,000</div>
+      <div class="stat-desc">Anonymized records across 32 clients</div>
+    </div>
+    <div class="card col-4">
+      <div class="card-title">Baseline vs Random Guess</div>
+      <div class="stat-val" style="color: #ff5757;">-22 pts</div>
+      <div class="stat-desc">Hand-written rule (30%) underperformed random guessing (52%)</div>
+    </div>
 
-  <div class="abstract">
-    <strong>Abstract.</strong> This paper asks which content pages should be prioritized
-    for review first, when a team has limited time and thousands of pages to check.
-    Using 30,000 real (anonymized) content performance records from FlyRank's production
-    data, I built a transparent rule-based baseline, then trained logistic regression and
-    random forest models on a client-held-out split to avoid inflated scores from
-    memorization. Logistic regression performed best, reaching a precision@50 of 0.63,
-    followed by random forest at 0.58 — both notably ahead of random guessing (0.52).
-    Surprisingly, the hand-written baseline rule underperformed even random guessing, at
-    0.30, suggesting its weighting scheme did not capture the real signal as well as a
-    learned model does. This is offered as decision-support for content teams, not a
-    guarantee; full limitations are discussed below.
+    <div class="card col-6">
+      <div class="card-title">Model Comparison (Precision@50)</div>
+      <canvas id="precisionChart" height="200"></canvas>
+    </div>
+
+    <div class="card col-6">
+      <div class="card-title">Feature Importance (Random Forest Gini)</div>
+      <canvas id="featureChart" height="200"></canvas>
+    </div>
+
+    <div class="card col-6">
+      <div class="card-title">Evaluation Setup</div>
+      <div class="pipeline-spec">
+<pre><code>{
+  <span class="key">"target_label"</span>: <span class="str">"is_declining"</span>,
+  <span class="key">"validation_strategy"</span>: <span class="str">"GroupShuffleSplit(test_size=0.25)"</span>,
+  <span class="key">"group_column"</span>: <span class="str">"client_id"</span>,
+  <span class="key">"leakage_excluded"</span>: [<span class="str">"trend_direction"</span>, <span class="str">"trend_pct"</span>],
+  <span class="key">"primary_metric"</span>: <span class="str">"Precision@50"</span>,
+  <span class="key">"seed"</span>: <span class="num">42</span>
+}</code></pre>
+      </div>
+      <div class="note">Single held-out client split, not cross-validated across multiple folds. A direction for future iterations.</div>
+    </div>
+
+    <div class="card col-6">
+      <div class="card-title">Example Ranked Queue</div>
+      <div class="control-group">
+        <label for="threshold">Risk Sensitivity Threshold: <span id="thresh-val">0.65</span></label>
+        <input type="range" id="threshold" min="0.30" max="0.90" step="0.05" value="0.65" oninput="updateQueue(this.value)">
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Page ID Hash</th>
+            <th>Model Score</th>
+            <th>Reason Code</th>
+            <th>Priority</th>
+          </tr>
+        </thead>
+        <tbody id="queue-body"></tbody>
+      </table>
+      <div class="note">Illustrative example using representative reason codes from the project's methodology — not live inference output. See the repo notebooks for the actual ranked results on real test-set pages.</div>
+    </div>
   </div>
 
-  <h2>1. Question</h2>
-  <p><strong>Research question:</strong> Which of a client's content pages should be
-  prioritized for review first, given limited reviewer time?</p>
-  <p><strong>Decision supported:</strong> A content/SEO reviewer needs to know where to
-  spend their next hour of work. This ranking replaces guesswork with an evidence-based
-  priority order, so review time goes to pages most likely to need it.</p>
-
-  <h2>2. Data</h2>
-  <p><strong>Source:</strong> FlyRank ML Internship starter dataset (anonymized),
-  30,000 rows, 44 columns, covering 32 clients.</p>
-  <p><strong>Excluded:</strong> <code>trend_direction</code> and <code>trend_pct</code>
-  are used only as the prediction label, never as model features. No raw client names or
-  URLs appear anywhere — all identifiers are hashed.</p>
-
-  <h2>3. Methodology</h2>
-  <p><strong>Label:</strong> <code>is_declining</code> = 1 if
-  <code>trend_direction == 'down'</code>, else 0.</p>
-  <p><strong>Baseline:</strong> a hand-written weighted rule combining visibility (40%),
-  freshness risk (30%), position opportunity (25%), and content depth gap (5%).</p>
-  <p><strong>Validation:</strong> grouped split by <code>client_id</code> — every
-  client's pages fall entirely into training or testing, never split between both.</p>
-  <p><strong>Leakage checks:</strong> confirmed no trend-derived columns were used as
-  model inputs; feature importance checked for suspicious dominance.</p>
-
-  <h2>4. Results</h2>
-  <figure>
-    <img src="img/chart_precision_comparison.png" alt="Model vs Baseline Precision at 50 chart">
-    <figcaption>Precision@50 across methods. Logistic regression (0.63) and random forest
-    (0.58) both outperform random guessing (0.52); the hand-written baseline (0.30) falls
-    below it.</figcaption>
-  </figure>
-
-  <table>
-    <tr><th>Method</th><th>Precision@50</th></tr>
-    <tr><td>Random guessing</td><td>0.52</td></tr>
-    <tr><td>Baseline rule</td><td>0.30</td></tr>
-    <tr><td>Logistic Regression</td><td>0.63</td></tr>
-    <tr><td>Random Forest</td><td>0.58</td></tr>
-  </table>
-
-  <figure>
-    <img src="img/chart_feature_importance.png" alt="Random Forest feature importance chart">
-    <figcaption>Impressions and average position carry the most weight in the Random
-    Forest model.</figcaption>
-  </figure>
-
-  <h2>5. Limitations</h2>
-  <p>This model is decision-support, not proof. It was trained on 32 clients with uneven
-  history lengths — performance is likely less reliable for clients with little data.</p>
-  <p>The baseline rule's underperformance (0.30, below random guessing) indicates its
-  hand-picked weights do not reliably separate declining pages from stable ones on this
-  dataset — a limitation of the rule's design, not the underlying data.</p>
-
-  <h2>6. Ranked recommendations</h2>
-  <p>The top of the action queue — pages the model flags as most worth reviewing first,
-  each with a plain-language reason code so no recommendation is a black box. See the
-  full notebook for the complete ranked table.</p>
-
-  <div class="footer">
-    <p><strong>Acknowledgments &amp; data credit.</strong> Built on the FlyRank ML
-    Internship dataset. Data source: <a href="https://flyrank.ai">FlyRank</a>.</p>
-    <p><strong>Reproducibility.</strong> Full notebooks and code:
-    <a href="https://github.com/muhammadhuzaifanaeem/FlyRank-Internship">github.com/muhammadhuzaifanaeem/FlyRank-Internship</a>.
-    All results use random_state=42.</p>
-  </div>
+  <footer>
+    <p><strong>Data credit:</strong> Built on the FlyRank ML Internship dataset. Source: <a href="https://flyrank.ai">FlyRank</a></p>
+    <p><strong>Full paper &amp; reproducibility:</strong> <a href="https://github.com/muhammadhuzaifanaeem/FlyRank-Internship">github.com/muhammadhuzaifanaeem/FlyRank-Internship</a> &middot; all results use random_state=42</p>
+  </footer>
 </div>
 
+<script>
+const ctxPrecision = document.getElementById('precisionChart').getContext('2d');
+new Chart(ctxPrecision, {
+  type: 'bar',
+  data: {
+    labels: ['Random Guess', 'Baseline Rule', 'Random Forest', 'Logistic Reg'],
+    datasets: [{
+      label: 'Precision@50 Score',
+      data: [0.52, 0.30, 0.58, 0.63],
+      backgroundColor: ['#3a475d', '#ff5757', '#11998e', '#38ef7d'],
+      borderRadius: 6
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, max: 1, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8a99ad' } },
+      x: { grid: { display: false }, ticks: { color: '#8a99ad' } }
+    }
+  }
+});
+
+const ctxFeature = document.getElementById('featureChart').getContext('2d');
+new Chart(ctxFeature, {
+  type: 'bar',
+  indexAxis: 'y',
+  data: {
+    labels: ['impressions_90d', 'avg_position', 'content_age_days', 'word_count', 'scroll_rate'],
+    datasets: [{
+      label: 'Gini Importance',
+      data: [0.28, 0.20, 0.16, 0.10, 0.055],
+      backgroundColor: '#38ef7d',
+      borderRadius: 4
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8a99ad' } },
+      y: { grid: { display: false }, ticks: { color: '#8a99ad' } }
+    }
+  }
+});
+
+const samplePages = [
+  { id: 'page_9f81a', score: 0.88, driver: 'stale_visible_page' },
+  { id: 'page_3c42b', score: 0.76, driver: 'declining_with_demand' },
+  { id: 'page_1a90e', score: 0.68, driver: 'low_ctr_visible_page' },
+  { id: 'page_7d22f', score: 0.54, driver: 'thin_visible_page' },
+  { id: 'page_4e11c', score: 0.41, driver: 'general_refresh_review' }
+];
+
+function updateQueue(val) {
+  document.getElementById('thresh-val').innerText = val;
+  const tbody = document.getElementById('queue-body');
+  tbody.innerHTML = '';
+
+  samplePages.forEach(page => {
+    if (page.score >= val) {
+      const tag = page.score > 0.75 ?
+        '<span class="status-tag status-high">HIGH</span>' :
+        '<span class="status-tag status-med">MEDIUM</span>';
+
+      tbody.innerHTML += `
+        <tr>
+          <td><code>${page.id}</code></td>
+          <td>${(page.score * 100).toFixed(0)}%</td>
+          <td>${page.driver}</td>
+          <td>${tag}</td>
+        </tr>`;
+    }
+  });
+}
+
+updateQueue(0.65);
+</script>
 </body>
 </html>
